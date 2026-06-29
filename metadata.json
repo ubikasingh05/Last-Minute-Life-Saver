@@ -1,6 +1,6 @@
 {
-  "name": "Last-Minute Life Saver",
+  "name": "PanicMate",
   "description": "An AI-powered task planner and companion that parses goals in plain language, evaluates urgency, and generates dynamic timelines to help you beat deadlines.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

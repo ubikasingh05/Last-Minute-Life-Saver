@@ -6,3 +6,58 @@
   --font-display: "Space Grotesk", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
+
+:root {
+  --app-bg: #FFF9E6;
+  --app-text: #1c1917; /* warm stone-900 */
+  --card-bg: #fffcf0; /* warmer lighter pastel */
+  --card-border: #f1e4c3; /* warm soft border */
+  --input-bg: #ffffff;
+  --input-text: #1c1917;
+  --text-main: #1c1917;
+  --text-muted: #57534e; /* stone-600 */
+  --button-hover: #fcf6dc;
+}
+
+.dark {
+  --app-bg: #09090b; /* zinc-950 */
+  --app-text: #f4f4f5; /* zinc-100 */
+  --card-bg: #18181b; /* zinc-900 */
+  --card-border: #27272a; /* zinc-800 */
+  --input-bg: #09090b; /* zinc-950 */
+  --input-text: #f4f4f5;
+  --text-main: #f4f4f5;
+  --text-muted: #a1a1aa; /* zinc-400 */
+  --button-hover: #27272a;
+}
+
+/* Theme utility classes for seamless background and text transitions */
+.bg-theme-main {
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+.bg-theme-card {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+  transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+.bg-theme-input {
+  background-color: var(--input-bg);
+  border-color: var(--card-border);
+  color: var(--input-text);
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+
+.text-theme-main {
+  color: var(--text-main);
+  transition: color 0.25s ease;
+}
+
+.text-theme-muted {
+  color: var(--text-muted);
+  transition: color 0.25s ease;
+}
+
