@@ -23,7 +23,12 @@ export default function TaskList({ tasks, onToggleStatus, onEditTask, onDeleteTa
   const [draftErrorId, setDraftErrorId] = useState<string | null>(null);
   const [draftModalOpen, setDraftModalOpen] = useState(false);
   const [selectedDraftTask, setSelectedDraftTask] = useState<Task | null>(null);
-  const [draftData, setDraftData] = useState<{ subject: string; body: string }>({ subject: '', body: '' });
+  const [draftData, setDraftData] = useState<{ actionType: string; subject: string; body: string; searchUrl?: string }>({
+    actionType: '',
+    subject: '',
+    body: '',
+    searchUrl: ''
+  });
 
   const handleGenerateDraft = async (task: Task) => {
     setLoadingTaskId(task.id);
@@ -38,6 +43,8 @@ export default function TaskList({ tasks, onToggleStatus, onEditTask, onDeleteTa
           title: task.title,
           urgencyReason: task.urgencyReason,
           deadline: task.deadline,
+          actionType: task.actionType,
+          searchUrl: task.searchUrl,
         }),
       });
 
@@ -47,8 +54,10 @@ export default function TaskList({ tasks, onToggleStatus, onEditTask, onDeleteTa
 
       const data = await response.json();
       setDraftData({
+        actionType: data.actionType || '',
         subject: data.subject || '',
         body: data.body || '',
+        searchUrl: data.searchUrl || '',
       });
       setSelectedDraftTask(task);
       setDraftModalOpen(true);
@@ -381,12 +390,24 @@ export default function TaskList({ tasks, onToggleStatus, onEditTask, onDeleteTa
                                 {loadingTaskId === task.id ? (
                                   <>
                                     <Sparkles className="w-3.5 h-3.5 animate-spin animate-pulse" />
-                                    <span>Drafting response...</span>
+                                    <span>
+                                      {task.actionType === 'research'
+                                        ? 'Launching Research...'
+                                        : task.actionType === 'outline'
+                                        ? 'Drafting Outline...'
+                                        : 'Drafting response...'}
+                                    </span>
                                   </>
                                 ) : (
                                   <>
                                     <Sparkles className="w-3.5 h-3.5 text-zinc-950 animate-pulse" />
-                                    <span>Draft for me</span>
+                                    <span>
+                                      {task.actionType === 'research'
+                                        ? 'Launch Research Assistant'
+                                        : task.actionType === 'outline'
+                                        ? 'Generate Document Outline'
+                                        : 'Draft for me'}
+                                    </span>
                                   </>
                                 )}
                               </button>
@@ -445,7 +466,8 @@ export default function TaskList({ tasks, onToggleStatus, onEditTask, onDeleteTa
         initialSubject={draftData.subject}
         initialBody={draftData.body}
         taskTitle={selectedDraftTask?.title || ''}
-        actionType={selectedDraftTask?.actionType || 'none'}
+        actionType={draftData.actionType || selectedDraftTask?.actionType || 'none'}
+        searchUrl={draftData.searchUrl}
       />
 
       {/* Completed Tasks section */}

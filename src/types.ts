@@ -7,6 +7,7 @@ export interface Task {
   status: 'pending' | 'done';
   actionable?: boolean; // whether it requires outbound communication or a prompt draft
   actionType?: string; // type of action, e.g. "email", "notification", "none"
+  searchUrl?: string; // search URL if research action
   subTasks?: string[]; // exactly 3 micro-tasks if complex, or empty array
   completedSubTasks?: string[]; // tracking completed micro-tasks on the frontend
 }

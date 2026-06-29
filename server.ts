@@ -125,8 +125,31 @@ function fallbackParseTasks(inputText: string, referenceTime: string) {
 
     let actionable = false;
     let actionType = "none";
+    let searchUrl = "";
     const lowerTitle = title.toLowerCase();
-    if (lowerTitle.includes("email") || lowerTitle.includes("mail")) {
+    
+    const isResearch = lowerTitle.includes("find") || 
+                      lowerTitle.includes("research") || 
+                      lowerTitle.includes("look up") || 
+                      lowerTitle.includes("study") || 
+                      lowerTitle.includes("sources") || 
+                      lowerTitle.includes("read");
+
+    const isWriting = lowerTitle.includes("write") ||
+                      lowerTitle.includes("draft") ||
+                      lowerTitle.includes("essay") ||
+                      lowerTitle.includes("report") ||
+                      lowerTitle.includes("paper") ||
+                      lowerTitle.includes("summarize");
+
+    if (isResearch) {
+      actionable = true;
+      actionType = "research";
+      searchUrl = `https://www.google.com/search?q=${encodeURIComponent(title)}`;
+    } else if (isWriting) {
+      actionable = true;
+      actionType = "outline";
+    } else if (lowerTitle.includes("email") || lowerTitle.includes("mail")) {
       actionable = true;
       actionType = "email";
     } else if (lowerTitle.includes("call") || lowerTitle.includes("phone")) {
@@ -144,6 +167,7 @@ function fallbackParseTasks(inputText: string, referenceTime: string) {
       urgencyReason,
       actionable,
       actionType,
+      searchUrl,
       subTasks: []
     });
   }
@@ -232,7 +256,11 @@ Rules:
    - 'medium': Deadline is 1 to 3 days away.
    - 'low': Deadline is more than 3 days away.
 3. Urgency Reason: Write a short (1 sentence), punchy, empathetic, and encouraging tip or justification explaining why it's rated that way and how the user can start immediately to beat the deadline.
-4. Outbound Communication Detection: Classify whether the task requires outbound communication (such as sending an email, requesting an extension, asking for help, notifying someone, or messaging someone on Slack/phone). Set 'actionable' to true if it does, and false otherwise. Classify the 'actionType' as 'email', 'call', 'notification', 'slack', etc., or 'none' if it is not a communication task.
+4. Outbound Communication, Research & Writing Detection:
+   - If the user's task contains words like "Write", "Draft", "Essay", "Report", "Paper", or "Summarize", you MUST classify this as a writing assignment. You must strictly set 'actionable' to true and 'actionType' to 'outline' in the returned task JSON.
+   - If a task contains words like 'Find', 'Research', 'Look up', 'Study', 'Sources', or 'Read' (case-insensitive), you MUST strictly set 'actionable' to true and 'actionType' to 'research'. You must also auto-generate a highly optimized, URL-encoded Google Search or Google Scholar query URL as the 'searchUrl' field directly in the task object (e.g. 'https://www.google.com/search?q=...'). Make the query specific and optimized for finding quality papers, tutorials, or guides related to that task.
+   - For outbound communication tasks (such as sending an email, requesting an extension, asking for help, notifying someone, or messaging someone on Slack/phone), set 'actionable' to true and 'actionType' to 'email', 'call', 'notification', 'slack', etc.
+   - Otherwise, set 'actionable' to false and 'actionType' to 'none', and set 'searchUrl' to an empty string "".
 5. 'Break It Down' Engine: Evaluate if the task is complex, large, or multi-step (e.g. studying, coding, writing papers, preparing presentations, organizing events). If it is, you must automatically break it down into an array of exactly 3 distinct, highly actionable, step-by-step micro-tasks. If the task is simple or doesn't need breaking down, return an empty array [].`,
           responseMimeType: "application/json",
           responseSchema: {
@@ -247,15 +275,16 @@ Rules:
                     deadline: { type: Type.STRING, description: "The resolved absolute date and time for the deadline in 'YYYY-MM-DD HH:mm' format" },
                     urgency: { type: Type.STRING, description: "Urgency evaluation: must be one of 'high', 'medium', or 'low'" },
                     urgencyReason: { type: Type.STRING, description: "A short, motivating reason/tip (1 sentence)" },
-                    actionable: { type: Type.BOOLEAN, description: "True if the task requires outbound communication (e.g., emailing, asking for extension, notifying someone), false otherwise" },
-                    actionType: { type: Type.STRING, description: "The type of action required (e.g. 'email', 'call', 'notification', 'slack', or 'none')" },
+                    actionable: { type: Type.BOOLEAN, description: "True if the task requires outbound communication or is a research task, false otherwise" },
+                    actionType: { type: Type.STRING, description: "The type of action required (e.g. 'research', 'email', 'call', 'notification', 'slack', or 'none')" },
+                    searchUrl: { type: Type.STRING, description: "Google Search or Google Scholar URL if this is a research task, or empty string otherwise" },
                     subTasks: {
                       type: Type.ARRAY,
                       items: { type: Type.STRING },
                       description: "An array of exactly 3 distinct, actionable, and specific micro-tasks to break down the main task if complex, large, or multi-step. Return an empty array [] if the task is simple or does not need breaking down."
                     }
                   },
-                  required: ["title", "deadline", "urgency", "urgencyReason", "actionable", "actionType", "subTasks"]
+                  required: ["title", "deadline", "urgency", "urgencyReason", "actionable", "actionType", "searchUrl", "subTasks"]
                 }
               }
             },
@@ -351,12 +380,20 @@ Rules:
 // Endpoint to generate draft communication for an actionable task
 app.post("/api/tasks/:id/draft", async (req, res) => {
   const { id } = req.params;
-  const { title, description, urgencyReasoning, urgencyReason, deadline } = req.body;
+  const { title, description, urgencyReasoning, urgencyReason, deadline, actionType, searchUrl } = req.body;
   const reasoning = urgencyReasoning || urgencyReason || "";
 
+  if (actionType === 'research' && searchUrl) {
+    return res.json({
+      actionType: 'research',
+      searchUrl,
+      subject: `Research for ${title}`,
+      body: `Search query: ${title}`
+    });
+  }
+
   try {
-    const prompt = `You are 'PanicMate' communication drafter.
-Create a polished, highly professional, or context-appropriate draft (e.g. email, Slack message, or call script) to help the user address the deadline or request.
+    const prompt = `You are 'PanicMate' Autonomous Action Engine. Your role is to assist the user based on the classification of the task:
 
 Task Context:
 - ID: ${id}
@@ -365,22 +402,47 @@ Task Context:
 - Deadline: ${deadline || "Not specified"}
 - Urgency Reason: ${reasoning}
 
-Please draft a ready-to-send message. If the action is email-based, write a clear subject line and body. If it is a direct message or call script, write an appropriate heading/subject (like "[Slack Direct Message]" or "[Phone Script]") and the main message body. Make the tone polite, urgent but professional, taking responsibility if necessary, and proposing a clear action item.`;
+Determine which category this task fits:
+1. Research Task:
+   - Criteria: The task is about research, studying, finding information, Googling, or looking up papers.
+   - Action: Generate a highly optimized, URL-encoded Google Search or Google Scholar query URL. Return 'actionType': 'research' and 'searchUrl' as the fully qualified URL (e.g., https://www.google.com/search?q=...). Make the query highly professional, specific, and optimized to find quality papers or guides.
+2. Writing Assignment Task:
+   - Criteria: The task is a writing assignment (essays, reports, research papers, presentations, blog posts, outlines, documentation, drafts).
+   - Action: Draft a comprehensive structural document outline including a Thesis Statement, Main Sections, and a Conclusion. Return 'actionType': 'outline', 'subject': 'Document Outline', and 'body' containing the outline formatted in beautiful, clear, nested markdown.
+3. Default Fallback / Communication Task:
+   - Criteria: Any other task, particularly those involving emailing, texting, communicating, asking for extensions, coordinating, or messaging.
+   - Action: Draft a polished, ready-to-send email or Slack message. Return 'actionType': 'email', 'subject' as a clear, polite subject line or header, and 'body' as the friendly, professional draft.
+
+Be precise. Ensure you output valid JSON containing the classified 'actionType' and the correct fields corresponding to that type.`;
 
     const response = await callGeminiWithRetry(async () => {
       return await ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
-          systemInstruction: "You generate custom communication drafts. Output a JSON object containing a 'subject' string (e.g., email subject or message header) and a 'body' string containing the drafted message.",
+          systemInstruction: "You are the PanicMate Autonomous Action assistant. Classify the task and return the structured action response JSON. Follow the schema strictly.",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              subject: { type: Type.STRING, description: "The email subject line or message header" },
-              body: { type: Type.STRING, description: "The complete body text of the message draft" }
+              actionType: { 
+                type: Type.STRING, 
+                description: "Must be one of 'research', 'outline', or 'email'" 
+              },
+              searchUrl: { 
+                type: Type.STRING, 
+                description: "Google Search or Scholar URL for research tasks. Empty or omit for other types." 
+              },
+              subject: { 
+                type: Type.STRING, 
+                description: "The subject line, outline title, or message header (for 'outline' or 'email' tasks)." 
+              },
+              body: { 
+                type: Type.STRING, 
+                description: "The main body content or structured markdown outline (for 'outline' or 'email' tasks)." 
+              }
             },
-            required: ["subject", "body"]
+            required: ["actionType"]
           }
         }
       });
@@ -395,15 +457,37 @@ Please draft a ready-to-send message. If the action is email-based, write a clea
     res.json(draftData);
   } catch (error: any) {
     console.warn("Using local fallback draft generator due to Gemini API error:", error.message || error);
-    const isEmail = (title || "").toLowerCase().includes("email") || (title || "").toLowerCase().includes("mail");
-    const subject = isEmail ? `Regarding: ${title}` : `[Action Draft] ${title}`;
-    const body = `Hi there,\n\nI wanted to reach out regarding "${title}". The deadline is currently set for ${deadline || 'soon'}.\n\nCould we coordinate on this at your earliest convenience?\n\nBest regards,\n[Your Name]`;
+    const lowerTitle = (title || "").toLowerCase();
+    const isResearch = lowerTitle.includes("research") || lowerTitle.includes("study") || lowerTitle.includes("find") || lowerTitle.includes("learn") || lowerTitle.includes("search");
+    const isWriting = lowerTitle.includes("write") || lowerTitle.includes("essay") || lowerTitle.includes("report") || lowerTitle.includes("paper") || lowerTitle.includes("outline") || lowerTitle.includes("presentation");
     
-    res.json({
-      subject,
-      body,
-      isFallback: true
-    });
+    if (isResearch) {
+      const query = encodeURIComponent(title);
+      res.json({
+        actionType: "research",
+        searchUrl: `https://www.google.com/search?q=${query}`,
+        subject: `Research for ${title}`,
+        body: `Search query: ${title}`,
+        isFallback: true
+      });
+    } else if (isWriting) {
+      res.json({
+        actionType: "outline",
+        subject: "Document Outline",
+        body: `### Title: ${title}\n\n1. **Thesis Statement**\n   - Introduction and core argument for ${title}.\n\n2. **Main Sections**\n   - Section A: Key background and context.\n   - Section B: Detailed analysis and findings.\n   - Section C: Supporting evidence and discussion.\n\n3. **Conclusion**\n   - Summary of main points and final takeaways.`,
+        isFallback: true
+      });
+    } else {
+      const isEmail = lowerTitle.includes("email") || lowerTitle.includes("mail");
+      const subject = isEmail ? `Regarding: ${title}` : `[Action Draft] ${title}`;
+      const body = `Hi there,\n\nI wanted to reach out regarding "${title}". The deadline is currently set for ${deadline || 'soon'}.\n\nCould we coordinate on this at your earliest convenience?\n\nBest regards,\n[Your Name]`;
+      res.json({
+        actionType: "email",
+        subject,
+        body,
+        isFallback: true
+      });
+    }
   }
 });
 
