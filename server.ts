@@ -202,7 +202,29 @@ function fallbackPlanDay(tasks: any[], currentTime: string) {
     return (urgencyWeight[b.urgency] || 0) - (urgencyWeight[a.urgency] || 0);
   });
 
+  let continuousTaskMins = 0;
+
   for (const task of sortedTasks) {
+    // If adding this 45-minute task block would cross the 2-hour (120 min) continuous work limit,
+    // insert a 15-minute Decompression Break first.
+    if (continuousTaskMins + 45 > 120) {
+      const breakStart = `${pad(currentHour)}:${pad(currentMin)}`;
+      const [breakEndH, breakEndM] = addMinutes(currentHour, currentMin, 15);
+      const breakEnd = `${pad(breakEndH)}:${pad(breakEndM)}`;
+
+      schedule.push({
+        startTime: breakStart,
+        endTime: breakEnd,
+        title: "Decompression Break",
+        description: "A 15-minute decompression break to rest your eyes, stretch, and take a deep breath. Decompress before resuming work.",
+        associatedTaskId: null
+      });
+
+      currentHour = breakEndH;
+      currentMin = breakEndM;
+      continuousTaskMins = 0; // Reset continuous work tracker
+    }
+
     const startTimeStr = `${pad(currentHour)}:${pad(currentMin)}`;
     const [endH, endM] = addMinutes(currentHour, currentMin, 45);
     const endTimeStr = `${pad(endH)}:${pad(endM)}`;
@@ -217,11 +239,12 @@ function fallbackPlanDay(tasks: any[], currentTime: string) {
 
     currentHour = endH;
     currentMin = endM;
+    continuousTaskMins += 45;
   }
 
   return {
     schedule,
-    coachingMessage: "Ready for action! We constructed this timeline locally using high-priority focus blocks. You are fully equipped to crush this.",
+    coachingMessage: "Ready for action! We constructed this timeline locally using high-priority focus blocks and regular decompression breaks. You are fully equipped to crush this.",
     isFallback: true
   };
 }
@@ -329,9 +352,9 @@ Current Local Time: ${currentTime}`;
         config: {
           systemInstruction: `You create a step-by-step, realistic time-blocked schedule starting from the Current Local Time.
 Rules:
-1. STRICTLY ONLY return the user's actual tasks rearranged by optimal time and priority. DO NOT include, generate, or schedule any breaks, lunch, meals, or filler downtime. The schedule should only contain raw, active work sessions for the user's real pending tasks.
+1. Rearrange the user's actual pending tasks into an optimal timeline. You MUST dynamically insert a 15-minute 'Decompression Break' block after every 2 hours of continuous scheduled task work. For these breaks, set associatedTaskId to null, set the title to 'Decompression Break', and provide a relaxing, mindful coaching instruction for the break.
 2. Build action-oriented, bite-sized focus blocks (usually 30 to 90 minutes each) for the pending tasks, prioritizing 'high' urgency tasks first.
-3. For each block, it MUST map directly to one of the user's pending tasks. Include its exact task 'id' in associatedTaskId.
+3. For each active task block, it MUST map directly to one of the user's pending tasks. Include its exact task 'id' in associatedTaskId. For breaks, set associatedTaskId to null.
 4. Provide a punchy, highly motivating coachingMessage at the end.`,
           responseMimeType: "application/json",
           responseSchema: {
